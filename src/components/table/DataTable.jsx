@@ -1,5 +1,5 @@
 import { flexRender } from '@tanstack/react-table'
-import { ChevronRightIcon, GripHorizontal, MoreHorizontal, ArrowUp, ArrowDown, ChevronDown, EyeOff, Pin, Filter } from 'lucide-react'
+import { ChevronRightIcon, GripHorizontal, MoreHorizontal, ArrowUp, ArrowDown, ChevronDown, EyeOff, Pin, Filter, SearchIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Check } from "lucide-react"
 
 export function DataTable({ 
@@ -69,29 +69,43 @@ export function DataTable({
                           </PopoverTrigger>
                           <PopoverContent className="w-[200px] p-0" align="start">
                             <Command>
-                              <CommandInput placeholder={`Search ${header.column.columnDef.header}...`} />
-                              <CommandEmpty>No results found.</CommandEmpty>
-                              <CommandGroup>
-                                {Array.from(new Set(table.getCoreRowModel().rows.map(row => row.getValue(header.column.id)))).map((value) => (
-                                  <CommandItem
-                                    key={value}
-                                    onSelect={() => {
-                                      const filterValue = header.column.getFilterValue() || []
-                                      const newFilterValue = filterValue.includes(value)
-                                        ? filterValue.filter(v => v !== value)
-                                        : [...filterValue, value]
-                                      header.column.setFilterValue(newFilterValue.length ? newFilterValue : undefined)
-                                    }}
-                                  >
-                                    <div className="flex items-center justify-between w-full">
-                                      <span>{value}</span>
-                                      {header.column.getFilterValue()?.includes(value) && (
-                                        <Check className="h-4 w-4" />
-                                      )}
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
+                              <CommandInput 
+                                placeholder={`Search ${header.column.columnDef.header}...`}
+                              />
+                              <CommandList>
+                                <CommandEmpty>No results found.</CommandEmpty>
+                                <CommandGroup>
+                                  {Array.from(
+                                    new Set(
+                                      table
+                                        .getCoreRowModel()
+                                        .rows
+                                        .map(row => row.getValue(header.column.id))
+                                        .filter(Boolean)
+                                    )
+                                  ).sort().map((value) => {
+                                    const filterValue = header.column.getFilterValue() || []
+                                    return (
+                                      <CommandItem
+                                        key={value}
+                                        onSelect={() => {
+                                          const newFilterValues = filterValue.includes(value)
+                                            ? filterValue.filter(v => v !== value)
+                                            : [...filterValue, value]
+                                          header.column.setFilterValue(newFilterValues.length ? newFilterValues : undefined)
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <span>{value}</span>
+                                          {filterValue.includes(value) && (
+                                            <Check className="h-4 w-4" />
+                                          )}
+                                        </div>
+                                      </CommandItem>
+                                    )
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
                             </Command>
                           </PopoverContent>
                         </Popover>
