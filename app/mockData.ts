@@ -1,0 +1,183 @@
+export const mockData = [
+  {
+    id: 1,
+    site: 'Site A',
+    description: 'Natural Gas Consumption',
+    measurement: '45,000 therms',
+    tonsOfCO2e: 548.104,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Healthy Data',
+    assignedTo: 'john@example.com',
+    tags: 'scope1,energy',
+    cost: 52000,
+    scope: 'Scope 1',
+    organization: 'Building Operations',
+    progress: 85,
+    trend: [30, 45, 25, 60, 75, 85],
+    quality: 9,
+    team: [
+      { name: 'John Smith', avatar: '' },
+      { name: 'Sarah Wilson', avatar: '' },
+      { name: 'Mike Johnson', avatar: '' }
+    ]
+  },
+  {
+    id: 2,
+    site: 'Site B',
+    description: 'Electricity Usage',
+    measurement: '120,000 kWh',
+    tonsOfCO2e: 325.5,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Needs Review',
+    assignedTo: 'sarah@example.com',
+    tags: 'scope2,energy',
+    cost: 15000,
+    scope: 'Scope 2',
+    organization: 'Facilities',
+    progress: 45,
+    trend: [50, 45, 35, 30, 45, 40],
+    quality: 4,
+    team: [
+      { name: 'Sarah Wilson', avatar: '' },
+      { name: 'Alex Brown', avatar: '' }
+    ]
+  },
+  {
+    id: 3,
+    site: 'Site C',
+    description: 'Vehicle Fleet Emissions',
+    measurement: '2,500 gallons',
+    tonsOfCO2e: 22.5,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Needs Attention',
+    assignedTo: 'mike@example.com',
+    tags: 'scope1,transport',
+    cost: 8500,
+    scope: 'Scope 1',
+    organization: 'Fleet Management',
+    progress: 15,
+    trend: [20, 15, 25, 10, 15, 15],
+    quality: 3,
+    team: [
+      { name: 'Mike Johnson', avatar: '' },
+      { name: 'John Smith', avatar: '' }
+    ]
+  },
+  {
+    id: 4,
+    site: 'Site A',
+    description: 'Waste Management',
+    measurement: '5,000 lbs',
+    tonsOfCO2e: 12.3,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Pending Gravity QA',
+    assignedTo: 'alex@example.com',
+    tags: 'scope3,waste',
+    cost: 3000,
+    scope: 'Scope 3',
+    organization: 'Facilities',
+    progress: 60,
+    trend: [40, 55, 50, 65, 55, 60],
+    quality: 7,
+    team: [
+      { name: 'Alex Brown', avatar: '' },
+      { name: 'Sarah Wilson', avatar: '' }
+    ]
+  },
+  {
+    id: 5,
+    site: 'Site D',
+    description: 'Solar Panel Generation',
+    measurement: '75,000 kWh',
+    tonsOfCO2e: -15.8,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Healthy Data',
+    assignedTo: 'emma@example.com',
+    tags: 'scope2,renewable',
+    cost: 0,
+    scope: 'Scope 2',
+    organization: 'Sustainability',
+    progress: 95,
+    trend: [70, 85, 90, 88, 92, 95],
+    quality: 9,
+    team: [
+      { name: 'Emma Davis', avatar: '' },
+      { name: 'John Smith', avatar: '' },
+      { name: 'Lisa Chen', avatar: '' },
+      { name: 'Tom Wilson', avatar: '' }
+    ]
+  },
+  {
+    id: 6,
+    site: 'Site B',
+    description: 'Water Treatment',
+    measurement: '250,000 gallons',
+    tonsOfCO2e: 8.9,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Needs Review',
+    assignedTo: 'lisa@example.com',
+    tags: 'scope3,water',
+    cost: 12500,
+    scope: 'Scope 3',
+    organization: 'Facilities',
+    progress: 35,
+    trend: [60, 50, 45, 40, 38, 35],
+    quality: 5,
+    team: [
+      { name: 'Lisa Chen', avatar: '' },
+      { name: 'Mike Johnson', avatar: '' }
+    ]
+  },
+  {
+    id: 7,
+    site: 'Site E',
+    description: 'Employee Air Travel',
+    measurement: '50,000 miles',
+    tonsOfCO2e: 125.4,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Needs Attention',
+    assignedTo: 'tom@example.com',
+    tags: 'scope3,travel',
+    cost: 75000,
+    scope: 'Scope 3',
+    organization: 'Business Operations',
+    progress: 20,
+    trend: [15, 18, 25, 22, 19, 20],
+    quality: 2,
+    team: [
+      { name: 'Tom Wilson', avatar: '' },
+      { name: 'Emma Davis', avatar: '' },
+      { name: 'Sarah Wilson', avatar: '' }
+    ]
+  },
+  {
+    id: 8,
+    site: 'Site C',
+    description: 'Refrigerant Leakage',
+    measurement: '15 kg',
+    tonsOfCO2e: 28.7,
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    status: 'Pending Gravity QA',
+    assignedTo: 'david@example.com',
+    tags: 'scope1,refrigerants',
+    cost: 5000,
+    scope: 'Scope 1',
+    organization: 'Maintenance',
+    progress: 75,
+    trend: [50, 60, 65, 70, 72, 75],
+    quality: 8,
+    team: [
+      { name: 'David Kim', avatar: '' },
+      { name: 'Lisa Chen', avatar: '' },
+      { name: 'Mike Johnson', avatar: '' }
+    ]
+  }
+] 
