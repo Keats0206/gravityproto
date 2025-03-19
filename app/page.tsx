@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, X, Filter, ChevronDown, ChevronRight, Check, Plus, Search, Settings2, Save, PlusCircle, GripHorizontal, ChevronLeft, ChevronLastIcon, Pencil, CalendarIcon } from 'lucide-react'
+import { X, Filter, ChevronDown, ChevronRight, Check, Plus, Search, Settings2, Save, PlusCircle, GripHorizontal, ChevronLeft, CalendarIcon } from 'lucide-react'
 import { mockData } from './mockData'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command'
@@ -12,8 +12,10 @@ import { Badge } from "@/components/ui/badge"
 import { useState } from 'react'
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import Image from 'next/image'
+import { format } from "date-fns"
+import { CommandDialog } from "@/components/ui/command"
 
 // Define types
 interface FilterGroupProps {
@@ -50,7 +52,7 @@ interface Row {
   trend: number[];
   quality: number;
   team: { name: string; avatar: string }[];
-  [key: string]: string | number | null | any[];
+  [key: string]: string | number | null | number[] | { name: string; avatar: string }[] | undefined;
 }
 
 interface View {
@@ -81,16 +83,6 @@ interface Filters {
   [key: string]: string[];
 }
 
-// Add date formatter helper
-function formatDate(dateString: string) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
-
 function ActiveFilterGroup({ type, values, selectedValues, onChange, onRemove }: FilterGroupProps) {
   const displayCount = 2 // Number of values to display before showing +N
   const selected = selectedValues || []
@@ -116,7 +108,7 @@ function ActiveFilterGroup({ type, values, selectedValues, onChange, onRemove }:
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-1">
             <div className="flex items-center gap-1">
-              {selected.slice(0, displayCount).map((value, i) => (
+              {selected.slice(0, displayCount).map(value => (
                 <span key={value} className="bg-gray-100 px-2 py-0.5 rounded-md text-sm">
                   {value}
                 </span>
@@ -198,9 +190,10 @@ function SparkLine({ data }: { data: number[] }) {
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min
-  const points = data.map((value, i) => {
-    const x = (i / (data.length - 1)) * 100
-    const y = ((value - min) / range) * 100
+  const points = data.map((value, index) => {
+    const xCoord = (index / (data.length - 1)) * 100
+    const yCoord = ((value - min) / range) * 100
+    return `${xCoord},${yCoord}`
   }).join(' ')
 
   return (
@@ -221,14 +214,20 @@ function SparkLine({ data }: { data: number[] }) {
 function TeamAvatars({ team }: { team: { name: string; avatar: string }[] }) {
   return (
     <div className="flex items-center -space-x-2">
-      {team.map((member, i) => (
+      {team.map((member) => (
         <div 
           key={member.name}
           className="relative rounded-full w-8 h-8 border-2 border-white bg-stone-100 flex items-center justify-center overflow-hidden hover:z-10"
           title={member.name}
         >
           {member.avatar ? (
-            <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+            <Image 
+              src={member.avatar} 
+              alt={member.name} 
+              width={32} 
+              height={32} 
+              className="w-full h-full object-cover" 
+            />
           ) : (
             <span className="text-xs font-medium text-stone-600">
               {member.name.split(' ').map(n => n[0]).join('')}
@@ -245,6 +244,8 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [isCreateViewOpen, setIsCreateViewOpen] = useState<boolean>(false)
   const [newViewName, setNewViewName] = useState<string>('')
+  const [isCreatingView, setIsCreatingView] = useState<boolean>(false)
+  const [commandOpen, setCommandOpen] = useState<boolean>(false)
   const [savedViews, setSavedViews] = useState<View[]>([
     { name: 'Default View', filters: { site: [], status: [], scope: [], organization: [] } },
     { name: 'High Emissions', filters: { site: [], status: [], scope: ['Scope 1'], organization: [] } },
@@ -259,24 +260,55 @@ export default function Home() {
 
   // Get unique values for filter options
   const filterOptions = {
-    site: [...new Set(mockData.map(d => d.site))],
-    status: [...new Set(mockData.map(d => d.status))],
-    scope: [...new Set(mockData.map(d => d.scope))],
-    organization: [...new Set(mockData.map(d => d.organization))]
+    site: [...new Set((mockData || []).map(d => d?.site || ''))].filter(Boolean),
+    status: [...new Set((mockData || []).map(d => d?.status || ''))].filter(Boolean),
+    scope: [...new Set((mockData || []).map(d => d?.scope || ''))].filter(Boolean),
+    organization: [...new Set((mockData || []).map(d => d?.organization || ''))].filter(Boolean)
   }
 
-  // Add modified data state
+  // State variables
   const [modifiedData, setModifiedData] = useState<Row[]>(mockData as Row[])
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
+  const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [activeDateCell, setActiveDateCell] = useState<{ rowId: string; columnId: string } | null>(null)
+
+  // Start editing
+  const startEditing = (rowId: string, columnId: string) => {
+    const column = columns.find(col => col.id === columnId)
+    if (!column?.editable) return
+    
+    if (columnId === 'startDate' || columnId === 'endDate') {
+      // Toggle the date picker if clicking the same cell
+      if (showDatePicker && activeDateCell?.rowId === rowId && activeDateCell?.columnId === columnId) {
+        setShowDatePicker(false)
+        setActiveDateCell(null)
+      } else {
+        setShowDatePicker(true)
+        setActiveDateCell({ rowId, columnId })
+      }
+    } else {
+      setEditingCell({ rowId, columnId })
+    }
+  }
 
   // Update save edit function
-  const saveEdit = (rowId: string, columnId: string, value: any) => {
+  const saveEdit = (rowId: string, columnId: string, value: string | number | null) => {
     setModifiedData(currentData => 
       currentData.map(row => 
         row.id.toString() === rowId ? { ...row, [columnId]: value } : row
       )
     )
     setEditingCell(null)
-    setEditValue(null)
+  }
+
+  // Handle key press
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, rowId: string, columnId: string, value: string) => {
+    if (e.key === 'Enter') {
+      saveEdit(rowId, columnId, value)
+    } else if (e.key === 'Escape') {
+      setEditingCell(null)
+    }
   }
 
   // Update filtered data to use modified data
@@ -329,7 +361,7 @@ export default function Home() {
     setSavedViews(views => [...views, { name: newViewName, filters: { ...filters } }])
     setViewName(newViewName)
     setNewViewName('')
-    setIsCreateViewOpen(false)
+    setCommandOpen(false)
   }
 
   // Load view
@@ -384,45 +416,10 @@ export default function Home() {
     ))
   }
 
-  // Add edit state
-  const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
-  const [editValue, setEditValue] = useState<any>(null)
-  const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
-
-  // Start editing
-  const startEditing = (rowId: string, columnId: string, value: any) => {
-    const column = columns.find(col => col.id === columnId)
-    if (!column?.editable) return
-    
-    if (columnId === 'startDate' || columnId === 'endDate') {
-      setDatePickerOpen({ rowId, columnId })
-    } else {
-      setEditingCell({ rowId, columnId })
-      setEditValue(value)
-    }
-  }
-
-  // Cancel edit
-  const cancelEdit = () => {
-    setEditingCell(null)
-    setEditValue(null)
-  }
-
-  // Handle key press
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, rowId: string, columnId: string, value: string) => {
-    if (e.key === 'Enter') {
-      saveEdit(rowId, columnId, value)
-    } else if (e.key === 'Escape') {
-      cancelEdit()
-    }
-  }
-
-  // Add new state for date picker
-  const [datePickerOpen, setDatePickerOpen] = useState<{ rowId: string; columnId: string } | null>(null)
-
   // Cell editor component
   const CellEditor = ({ row, column }: { row: Row; column: Column }) => {
     const value = row[column.id]
+    const stringValue = typeof value === 'string' ? value : value?.toString() || ''
     
     switch (column.id) {
       case 'status':
@@ -472,21 +469,20 @@ export default function Home() {
           <Popover>
             <PopoverTrigger asChild>
               <Button
-                variant={editingCell?.rowId === row.id.toString() && editingCell?.columnId === column.id ? "outline" : "ghost"}
+                variant="outline"
                 className={cn(
                   "w-full justify-start text-left font-normal h-8",
-                  !value && "text-muted-foreground",
-                  !editingCell && "hover:bg-transparent"
+                  !value && "text-muted-foreground"
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {value ? formatDate(value as string) : <span>Pick a date</span>}
+                {value ? format(new Date(value as string), "PPP") : <span>Pick a date</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
-                selected={new Date(value as string)}
+                selected={value ? new Date(value as string) : undefined}
                 onSelect={(date) => {
                   if (date) {
                     saveEdit(row.id.toString(), column.id, date.toISOString())
@@ -500,13 +496,13 @@ export default function Home() {
       
       case 'measurement':
       case 'tonsOfCO2e':
+        const numValue = typeof value === 'number' ? value : parseFloat(value as string) || 0
         return (
           <Input
             type="number"
-            defaultValue={value?.toString() || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditValue(e.target.value)}
+            defaultValue={numValue}
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyPress(e, row.id.toString(), column.id, e.currentTarget.value)}
-            onBlur={(e: React.FocusEvent<HTMLInputElement>) => saveEdit(row.id.toString(), column.id, e.target.value)}
+            onBlur={(e: React.FocusEvent<HTMLInputElement>) => saveEdit(row.id.toString(), column.id, parseFloat(e.target.value) || 0)}
             className="h-8"
             autoFocus
           />
@@ -515,8 +511,7 @@ export default function Home() {
       default:
         return (
           <Input
-            defaultValue={value?.toString() || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditValue(e.target.value)}
+            defaultValue={stringValue}
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyPress(e, row.id.toString(), column.id, e.currentTarget.value)}
             onBlur={(e: React.FocusEvent<HTMLInputElement>) => saveEdit(row.id.toString(), column.id, e.target.value)}
             className="h-8"
@@ -530,6 +525,13 @@ export default function Home() {
   const renderCell = (row: Row, column: Column) => {
     const isEditing = editingCell?.rowId === row.id.toString() && editingCell?.columnId === column.id
     const isHovered = hoveredCell?.rowId === row.id.toString() && hoveredCell?.columnId === column.id
+    const value = row[column.id]
+    
+    const handleCellClick = () => {
+      if (!isEditing && column.editable) {
+        startEditing(row.id.toString(), column.id)
+      }
+    }
     
     const cellContent = () => {
       if (isEditing && column.editable) {
@@ -588,27 +590,30 @@ export default function Home() {
         case 'startDate':
         case 'endDate':
           return (
-            <Popover>
+            <Popover open={showDatePicker && activeDateCell?.rowId === row.id.toString() && activeDateCell?.columnId === column.id}>
               <PopoverTrigger asChild>
                 <Button
-                  variant={isEditing ? "outline" : "ghost"}
+                  variant="ghost"
                   className={cn(
                     "w-full justify-start text-left font-normal h-8",
-                    !row[column.id] && "text-muted-foreground",
-                    !isEditing && "hover:bg-transparent"
+                    !value && "text-muted-foreground",
+                    "hover:bg-transparent"
                   )}
+                  onClick={() => startEditing(row.id.toString(), column.id)}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {row[column.id] ? formatDate(row[column.id] as string) : <span>Pick a date</span>}
+                  {value ? format(new Date(value as string), "PPP") : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
-                  selected={new Date(row[column.id] as string)}
+                  selected={value ? new Date(value as string) : undefined}
                   onSelect={(date) => {
                     if (date) {
                       saveEdit(row.id.toString(), column.id, date.toISOString())
+                      setShowDatePicker(false)
+                      setActiveDateCell(null)
                     }
                   }}
                   initialFocus
@@ -618,7 +623,7 @@ export default function Home() {
           )
         case 'measurement':
         case 'tonsOfCO2e':
-          return <div className="text-right font-medium">{(row[column.id] as number).toLocaleString()}</div>
+          return <div className="text-right font-medium">{(value as number).toLocaleString()}</div>
         case 'description':
           return (
             <div className="flex items-center gap-3">
@@ -634,7 +639,10 @@ export default function Home() {
             </div>
           )
         default:
-          return row[column.id]
+          if (typeof value === 'string' || typeof value === 'number') {
+            return value.toString()
+          }
+          return ''
       }
     }
 
@@ -648,7 +656,7 @@ export default function Home() {
         )}
         onMouseEnter={() => column.editable && setHoveredCell({ rowId: row.id.toString(), columnId: column.id })}
         onMouseLeave={() => setHoveredCell(null)}
-        onClick={() => !isEditing && column.editable && startEditing(row.id.toString(), column.id, row[column.id])}
+        onClick={handleCellClick}
       >
         {cellContent()}
       </div>
@@ -700,7 +708,10 @@ export default function Home() {
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsCreateViewOpen(true)}>
+                  <DropdownMenuItem onClick={() => {
+                    setCommandOpen(true)
+                    setIsCreatingView(true)
+                  }}>
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Create New View
                   </DropdownMenuItem>
@@ -811,28 +822,62 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Create View Dialog */}
-        <Dialog open={isCreateViewOpen} onOpenChange={setIsCreateViewOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New View</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="viewName">View Name</Label>
-              <Input
-                id="viewName"
-                value={newViewName}
-                onChange={(e) => setNewViewName(e.target.value)}
-                placeholder="Enter view name..."
-                className="mt-2"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateViewOpen(false)}>Cancel</Button>
-              <Button onClick={createNewView}>Create View</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Command Palette */}
+        <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+          <CommandInput 
+            placeholder={isCreatingView ? "Enter view name..." : "Search views..."} 
+            value={isCreatingView ? newViewName : ""}
+            onValueChange={(value) => isCreatingView ? setNewViewName(value) : null}
+            onKeyDown={(e) => {
+              if (isCreatingView && e.key === 'Enter') {
+                createNewView()
+              }
+            }}
+          />
+          <CommandList>
+            {isCreatingView ? (
+              <div className="flex items-center justify-end gap-2 p-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setIsCreatingView(false)
+                    setNewViewName('')
+                    setCommandOpen(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  size="sm"
+                  onClick={createNewView}
+                >
+                  Create View
+                </Button>
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>No views found.</CommandEmpty>
+                {savedViews.map(view => (
+                  <CommandItem
+                    key={view.name}
+                    onSelect={() => {
+                      loadView(view)
+                      setCommandOpen(false)
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white">
+                        {view.name === viewName && <Check className="h-3 w-3 text-primary" />}
+                      </div>
+                      <span>{view.name}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </>
+            )}
+          </CommandList>
+        </CommandDialog>
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg min-h-12">
           {/* Filter Menu */}
