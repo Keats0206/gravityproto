@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Filter, ChevronDown, ChevronRight, Check, Plus, Search, Settings2, Save, PlusCircle, GripHorizontal, ChevronLeft, CalendarIcon } from 'lucide-react'
+import { X, Filter, ChevronDown, ChevronRight, Check, Plus, Search, Settings2, Save, PlusCircle, GripHorizontal, ChevronLeft, CalendarIcon, ArrowUpDown, MoreHorizontal } from 'lucide-react'
 import { mockData } from './mockData'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command'
@@ -32,6 +32,7 @@ interface Column {
   visible: boolean;
   align?: 'right' | 'left';
   editable?: boolean;
+  sortable?: boolean;
 }
 
 interface Row {
@@ -58,10 +59,7 @@ interface Row {
 interface View {
   name: string;
   filters: {
-    site: string[];
-    status: string[];
-    scope: string[];
-    organization: string[];
+    [key: string]: string[];  // Match the Filters interface
   };
 }
 
@@ -76,11 +74,12 @@ interface HoveredCell {
 }
 
 interface Filters {
-  site: string[];
-  status: string[];
-  scope: string[];
-  organization: string[];
-  [key: string]: string[];
+  [key: string]: string[];  // Simplify to just use string arrays for all filters
+}
+
+// Add new interface for column filters
+interface ColumnFilters {
+  [columnId: string]: Set<string | number>;
 }
 
 function ActiveFilterGroup({ type, values, selectedValues, onChange, onRemove }: FilterGroupProps) {
@@ -161,7 +160,7 @@ function ProgressBar({ value }: { value: number }) {
   return (
     <div className="w-full bg-stone-100 rounded-full h-2">
       <div 
-        className="bg-blue-500 h-2 rounded-full transition-all" 
+        className="bg-blue-300 h-2 rounded-full transition-all" 
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -171,9 +170,9 @@ function ProgressBar({ value }: { value: number }) {
 function QualityIndicator({ value }: { value: number }) {
   const dots = Array.from({ length: 10 }, (_, i) => {
     const color = i < value 
-      ? i < 4 ? 'bg-red-400'
-      : i < 7 ? 'bg-yellow-400'
-      : 'bg-green-400'
+      ? i < 4 ? 'bg-red-300'
+      : i < 7 ? 'bg-yellow-300'
+      : 'bg-green-300'
       : 'bg-stone-200'
     return <div key={i} className={`w-2 h-2 rounded-full ${color}`} />
   })
@@ -204,7 +203,7 @@ function SparkLine({ data }: { data: number[] }) {
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
-          className="text-blue-500"
+          className="text-blue-300"
         />
       </svg>
     </div>
@@ -247,15 +246,63 @@ export default function Home() {
   const [isCreatingView, setIsCreatingView] = useState<boolean>(false)
   const [commandOpen, setCommandOpen] = useState<boolean>(false)
   const [savedViews, setSavedViews] = useState<View[]>([
-    { name: 'Default View', filters: { site: [], status: [], scope: [], organization: [] } },
-    { name: 'High Emissions', filters: { site: [], status: [], scope: ['Scope 1'], organization: [] } },
-    { name: 'Site Overview', filters: { site: ['Site A'], status: [], scope: [], organization: [] } }
+    { 
+      name: 'Default View', 
+      filters: {
+        site: [],
+        status: [],
+        scope: [],
+        organization: [],
+        description: [],
+        measurement: [],
+        tonsOfCO2e: [],
+        progress: [],
+        quality: [],
+        assignedTo: []
+      }
+    },
+    { 
+      name: 'High Emissions', 
+      filters: {
+        site: [],
+        status: [],
+        scope: ['Scope 1'],
+        organization: [],
+        description: [],
+        measurement: [],
+        tonsOfCO2e: [],
+        progress: [],
+        quality: [],
+        assignedTo: []
+      }
+    },
+    { 
+      name: 'Site Overview', 
+      filters: {
+        site: ['Site A'],
+        status: [],
+        scope: [],
+        organization: [],
+        description: [],
+        measurement: [],
+        tonsOfCO2e: [],
+        progress: [],
+        quality: [],
+        assignedTo: []
+      }
+    }
   ])
   const [filters, setFilters] = useState<Filters>({
     site: [],
     status: [],
     scope: [],
-    organization: []
+    organization: [],
+    description: [],
+    measurement: [],
+    tonsOfCO2e: [],
+    progress: [],
+    quality: [],
+    assignedTo: [],
   })
 
   // Get unique values for filter options
@@ -272,6 +319,7 @@ export default function Home() {
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [activeDateCell, setActiveDateCell] = useState<{ rowId: string; columnId: string } | null>(null)
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
   // Start editing
   const startEditing = (rowId: string, columnId: string) => {
@@ -311,14 +359,65 @@ export default function Home() {
     }
   }
 
-  // Update filtered data to use modified data
-  const filteredData = modifiedData.filter(row => {
-    if (filters.site.length && !filters.site.includes(row.site)) return false
-    if (filters.status.length && !filters.status.includes(row.status)) return false
-    if (filters.scope.length && !filters.scope.includes(row.scope)) return false
-    if (filters.organization.length && !filters.organization.includes(row.organization)) return false
-    return true
-  })
+  // Add sorting function
+  const sortData = (data: Row[]) => {
+    if (!sortConfig) return data;
+
+    return [...data].sort((a, b) => {
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
+
+      if (aValue === null || aValue === undefined) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (bValue === null || bValue === undefined) return sortConfig.direction === 'asc' ? 1 : -1;
+
+      // Handle different types of values
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      if (aValue instanceof Date && bValue instanceof Date) {
+        return sortConfig.direction === 'asc' ? aValue.getTime() - bValue.getTime() : bValue.getTime() - aValue.getTime();
+      }
+
+      // Convert to strings for string comparison
+      const aString = String(aValue).toLowerCase();
+      const bString = String(bValue).toLowerCase();
+
+      if (aString < bString) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aString > bString) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  // Update filtered data logic
+  const filteredData = sortData(modifiedData.filter(row => {
+    // Check all active filters
+    for (const [columnId, activeFilters] of Object.entries(filters)) {
+      if (activeFilters.length > 0) {
+        const value = row[columnId];
+        if (value !== undefined && value !== null) {
+          if (!activeFilters.includes(value.toString())) return false;
+        }
+      }
+    }
+    return true;
+  }));
+
+  // Handle column sort
+  const handleSort = (columnId: string) => {
+    const column = columns.find(col => col.id === columnId);
+    if (!column?.sortable) return;
+
+    setSortConfig(current => {
+      if (current?.key === columnId) {
+        if (current.direction === 'asc') {
+          return { key: columnId, direction: 'desc' };
+        }
+        return null;
+      }
+      return { key: columnId, direction: 'asc' };
+    });
+  };
 
   // Check if any filters are active
   const hasActiveFilters = Object.values(filters).some(arr => arr.length > 0)
@@ -372,17 +471,17 @@ export default function Home() {
 
   // Add column configuration state
   const [columns, setColumns] = useState<Column[]>([
-    { id: 'description', name: 'Description', visible: true, editable: false },
-    { id: 'measurement', name: 'Measurement', visible: true, align: 'right', editable: true },
-    { id: 'tonsOfCO2e', name: 'Emissions (tCO2e)', visible: true, align: 'right', editable: true },
-    { id: 'progress', name: 'Progress', visible: true, editable: false },
-    { id: 'trend', name: 'Trend', visible: true, editable: false },
-    { id: 'quality', name: 'Quality', visible: true, editable: false },
-    { id: 'team', name: 'Team', visible: true, editable: false },
-    { id: 'status', name: 'Status', visible: true, editable: true },
-    { id: 'startDate', name: 'Start Date', visible: true, editable: true },
-    { id: 'endDate', name: 'End Date', visible: true, editable: true },
-    { id: 'assignedTo', name: 'Email', visible: true, editable: true }
+    { id: 'description', name: 'Description', visible: true, editable: false, sortable: true },
+    { id: 'measurement', name: 'Measurement', visible: true, align: 'right', editable: true, sortable: true },
+    { id: 'tonsOfCO2e', name: 'Emissions (tCO2e)', visible: true, align: 'right', editable: true, sortable: true },
+    { id: 'progress', name: 'Progress', visible: true, editable: false, sortable: true },
+    { id: 'trend', name: 'Trend', visible: true, editable: false, sortable: false },
+    { id: 'quality', name: 'Quality', visible: true, editable: false, sortable: true },
+    { id: 'team', name: 'Team', visible: true, editable: false, sortable: false },
+    { id: 'status', name: 'Status', visible: true, editable: true, sortable: true },
+    { id: 'startDate', name: 'Start Date', visible: true, editable: true, sortable: true },
+    { id: 'endDate', name: 'End Date', visible: true, editable: true, sortable: true },
+    { id: 'assignedTo', name: 'Email', visible: true, editable: true, sortable: true }
   ])
 
   // Column drag state
@@ -424,10 +523,10 @@ export default function Home() {
     switch (column.id) {
       case 'status':
         const statusStyles: Record<string, string> = {
-          'Needs Attention': 'bg-red-100 text-red-600 hover:bg-red-200',
-          'Needs Review': 'bg-red-100 text-red-600 hover:bg-red-200',
-          'Pending Gravity QA': 'bg-blue-100 text-blue-600 hover:bg-blue-200',
-          'Healthy Data': 'bg-green-100 text-green-600 hover:bg-green-200'
+          'Needs Attention': 'bg-red-100 text-red-500 hover:bg-red-200',
+          'Needs Review': 'bg-red-100 text-red-500 hover:bg-red-200',
+          'Pending Gravity QA': 'bg-blue-100 text-blue-400 hover:bg-blue-200',
+          'Healthy Data': 'bg-green-100 text-green-500 hover:bg-green-200'
         }
         const defaultStyle = 'bg-stone-100 text-stone-900 hover:bg-stone-200'
         const pillStyle = statusStyles[row.status] || defaultStyle
@@ -526,6 +625,7 @@ export default function Home() {
     const isEditing = editingCell?.rowId === row.id.toString() && editingCell?.columnId === column.id
     const isHovered = hoveredCell?.rowId === row.id.toString() && hoveredCell?.columnId === column.id
     const value = row[column.id]
+    const isSortedColumn = sortConfig?.key === column.id
     
     const handleCellClick = () => {
       if (!isEditing && column.editable) {
@@ -541,10 +641,10 @@ export default function Home() {
       switch (column.id) {
         case 'status':
           const statusStyles: Record<string, string> = {
-            'Needs Attention': 'bg-red-100 text-red-600 hover:bg-red-200',
-            'Needs Review': 'bg-red-100 text-red-600 hover:bg-red-200',
-            'Pending Gravity QA': 'bg-blue-100 text-blue-600 hover:bg-blue-200',
-            'Healthy Data': 'bg-green-100 text-green-600 hover:bg-green-200'
+            'Needs Attention': 'bg-red-100 text-red-500 hover:bg-red-200',
+            'Needs Review': 'bg-red-100 text-red-500 hover:bg-red-200',
+            'Pending Gravity QA': 'bg-blue-100 text-blue-500 hover:bg-blue-200',
+            'Healthy Data': 'bg-green-100 text-green-500 hover:bg-green-200'
           }
           const defaultStyle = 'bg-stone-100 text-stone-900 hover:bg-stone-200'
           const pillStyle = statusStyles[row.status] || defaultStyle
@@ -651,8 +751,15 @@ export default function Home() {
         className={cn(
           "relative overflow-hidden",
           column.editable ? "cursor-pointer" : "cursor-default",
-          isHovered && column.editable ? "p-2 -m-2 rounded bg-gray-50" : "p-0 m-0",
-          column.align === 'right' ? "text-right font-medium" : "text-left"
+          isHovered && column.editable ? "p-2 -m-2 rounded bg-stone-200 transition-all duration-300" : "p-0 m-0",
+          column.align === 'right' ? "text-right font-medium" : "text-left",
+          isSortedColumn && "bg-blue-50/50",
+          column.id === 'description' && "min-w-[300px]",
+          column.id === 'status' && "min-w-[150px]",
+          column.id === 'team' && "min-w-[180px]",
+          column.id === 'trend' && "min-w-[120px]",
+          column.id === 'quality' && "min-w-[180px]",
+          column.id === 'progress' && "min-w-[150px]"
         )}
         onMouseEnter={() => column.editable && setHoveredCell({ rowId: row.id.toString(), columnId: column.id })}
         onMouseLeave={() => setHoveredCell(null)}
@@ -687,6 +794,7 @@ export default function Home() {
     <main className="p-4">
       <div>
         <div className="flex items-center justify-between gap-3 mb-2">
+          
           <div className="flex items-center gap-3">
             <span className="text-xl font-semibold">Table Prototype</span>
             <span className="text-sm text-gray-500">Showing {filteredData.length} of {mockData.length} rows</span>
@@ -739,25 +847,44 @@ export default function Home() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem>Show All Columns</DropdownMenuItem>
-                <DropdownMenuItem>Hide All Columns</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {columns.map(column => (
-                  <DropdownMenuItem
-                    key={column.id}
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      toggleColumnVisibility(column.id)
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white">
-                        {column.visible && <Check className="h-3 w-3 text-primary" />}
+                <div className="flex flex-col gap-1 p-2">
+                  <div className="flex items-center justify-between px-2 py-1 text-sm text-stone-600">
+                    <span>Column Order & Visibility</span>
+                  </div>
+                  {columns.map((column, index) => (
+                    <div
+                      key={column.id}
+                      className={cn(
+                        "text-sm flex items-center justify-between gap-2 px-2 py-1.5 rounded-md",
+                        draggedColumn === column.id && "opacity-50",
+                        "hover:bg-stone-100"
+                      )}
+                    >
+                      <div 
+                        className="flex items-center gap-2 flex-1"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          toggleColumnVisibility(column.id)
+                        }}
+                      >
+                        <div className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white cursor-pointer">
+                          {column.visible && <Check className="h-3 w-3 text-primary" />}
+                        </div>
+                        <span className="cursor-pointer">{column.name}</span>
                       </div>
-                      <span>{column.name}</span>
+                      <div
+                        className="cursor-grab active:cursor-grabbing"
+                        draggable
+                        onDragStart={() => handleDragStart(column.id)}
+                        onDragOver={(e) => handleDragOver(e, column.id)}
+                        onDragEnd={() => setDraggedColumn(null)}
+                      >
+                        <GripHorizontal className="h-4 w-4 text-stone-400" />
+                      </div>
                     </div>
-                  </DropdownMenuItem>
-                ))}
+                  ))}
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -1092,36 +1219,213 @@ export default function Home() {
               onRemove={() => removeFilter('organization')}
             />
           )}
-                  {hasActiveFilters && (
-              <button
-                onClick={() => setFilters({ site: [], status: [], scope: [], organization: [] })}
-                className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded-md"
-              >
-                Clear all
-              </button>
-            )}
+          {/* Column Filters */}
+          {columns.filter(col => col.visible).map(column => {
+            const columnFilters = filters[column.id] || [];
+            if (columnFilters.length === 0) return null;
+
+            const options = Array.from(new Set(modifiedData.map(row => {
+              const value = row[column.id];
+              return value !== undefined && value !== null ? value.toString() : null;
+            }).filter(Boolean)));
+
+            return (
+              <ActiveFilterGroup
+                key={column.id}
+                type={column.name}
+                values={options}
+                selectedValues={columnFilters}
+                onChange={(values) => setFilters(prev => ({ ...prev, [column.id]: values }))}
+                onRemove={() => setFilters(prev => ({ ...prev, [column.id]: [] }))}
+              />
+            );
+          })}
+          {hasActiveFilters && (
+            <button
+              onClick={() => setFilters({
+                site: [],
+                status: [],
+                scope: [],
+                organization: [],
+                description: [],
+                measurement: [],
+                tonsOfCO2e: [],
+                progress: [],
+                quality: [],
+                assignedTo: []
+              })}
+              className="flex items-center gap-1.5 text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded-md"
+            >
+              Clear all
+            </button>
+          )}
         </div>
 
       </div>
 
-      <div className="text-sm overflow-x-auto bg-sand-0">
-        <table className="w-full">
+      <div className="text-sm overflow-x-auto bg-sand-0 border border-stone-200">
+        <table className="w-full rounded-lg overflow-hidden">
           <thead>
-            <tr className="bg-stone-200 border-t border-b border-stone-300">
+            <tr className="bg-stone-200 border-b border-stone-300">
               {columns.filter(col => col.visible).map(column => (
                 <th
                   key={column.id}
-                  className={`uppercase py-2 px-4 text-xs font-medium text-stone-600 ${
-                    column.align === 'right' ? 'text-right' : 'text-left'
-                  } min-w-[150px] group cursor-move relative bg-stone-100`}
-                  draggable
-                  onDragStart={() => handleDragStart(column.id)}
-                  onDragOver={(e) => handleDragOver(e, column.id)}
-                  onDragEnd={() => setDraggedColumn(null)}
+                  className={cn(
+                    "uppercase py-2 px-4 text-xs font-medium text-stone-600",
+                    column.align === 'right' ? 'text-right' : 'text-left',
+                    "min-w-[200px] group relative",
+                    column.sortable && "cursor-pointer hover:bg-stone-200",
+                    sortConfig?.key === column.id ? "bg-blue-100" : "bg-stone-200",
+                    column.id === 'description' && "min-w-[300px]",
+                    column.id === 'status' && "min-w-[150px]",
+                    column.id === 'team' && "min-w-[180px]",
+                    column.id === 'trend' && "min-w-[120px]",
+                    column.id === 'quality' && "min-w-[180px]",
+                    column.id === 'progress' && "min-w-[150px]"
+                  )}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('.filter-dropdown')) return;
+                    handleSort(column.id);
+                  }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span>{column.name}</span>
-                    <GripHorizontal className="h-4 w-4 text-stone-700 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    <div className="flex items-center gap-1">
+                      {column.sortable && (
+                        <div className={cn(
+                          sortConfig?.key === column.id ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          "transition-opacity",
+                          "hover:bg-stone-300 rounded p-0.5 w-5 h-5 flex items-center justify-center"
+                        )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSort(column.id);
+                          }}
+                        >
+                          {sortConfig?.key === column.id ? (
+                            <div className="text-blue-500 text-sm">
+                              {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                            </div>
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-stone-500" />
+                          )}
+                        </div>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <div className={cn(
+                            "filter-dropdown",
+                            filters[column.id]?.length > 0 
+                              ? "opacity-100 bg-gray-200 border border-gray-300" 
+                              : "opacity-0 group-hover:opacity-100",
+                            "transition-opacity",
+                            "hover:bg-stone-300 rounded p-0.5",
+                            "data-[state=open]:opacity-100 data-[state=open]:bg-stone-300"
+                          )}>
+                            <div className="flex items-center gap-1">
+                              <Filter className={cn(
+                                "h-3 w-3",
+                                filters[column.id]?.length > 0 ? "text-gray-700" : "text-stone-600"
+                              )} />
+                              {filters[column.id]?.length > 0 && (
+                                <span className="text-xs bg-gray-100 px-1 rounded-full text-gray-700">
+                                  {filters[column.id].length}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-[200px] p-0">
+                          <Command>
+                            <CommandInput placeholder={`Search ${column.name.toLowerCase()}...`} />
+                            <CommandList>
+                              <CommandEmpty>No results found.</CommandEmpty>
+                              {Array.from(new Set(modifiedData.map(row => {
+                                const value = row[column.id];
+                                return value !== undefined && value !== null ? value.toString() : null;
+                              }).filter(Boolean))).map((value) => (
+                                <CommandItem
+                                  key={value}
+                                  onSelect={() => {
+                                    const currentFilters = filters[column.id] || [];
+                                    if (currentFilters.includes(value)) {
+                                      setFilters(prev => ({
+                                        ...prev,
+                                        [column.id]: currentFilters.filter(v => v !== value)
+                                      }));
+                                    } else {
+                                      setFilters(prev => ({
+                                        ...prev,
+                                        [column.id]: [...currentFilters, value]
+                                      }));
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <div className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white">
+                                      {filters[column.id]?.includes(value) && (
+                                        <Check className="h-3 w-3 text-primary" />
+                                      )}
+                                    </div>
+                                    <span>{value}</span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandList>
+                          </Command>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <div className={cn(
+                            "opacity-0 group-hover:opacity-100 transition-opacity",
+                            "hover:bg-stone-300 rounded p-0.5",
+                            "data-[state=open]:opacity-100 data-[state=open]:bg-stone-300"
+                          )}>
+                            <MoreHorizontal className="h-4 w-4 text-stone-600" />
+                          </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-[200px]">
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Hide Column</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Group by {column.name}</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Pin Column</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Add Column Left</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Add Column Right</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem>
+                            <div className="flex items-center gap-2">
+                              <span>Duplicate Column</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-500">
+                            <div className="flex items-center gap-2">
+                              <span>Delete Column</span>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </th>
               ))}
@@ -1131,7 +1435,13 @@ export default function Home() {
             {currentData.map((row) => (
               <tr key={row.id} className="hover:bg-stone-100">
                 {columns.filter(col => col.visible).map(column => (
-                  <td key={column.id} className="py-3 px-4 whitespace-nowrap overflow-hidden">
+                  <td 
+                    key={column.id} 
+                    className={cn(
+                      "py-3 px-4 whitespace-nowrap overflow-hidden",
+                      sortConfig?.key === column.id && "bg-blue-50/50"
+                    )}
+                  >
                     {renderCell(row, column)}
                   </td>
                 ))}
@@ -1141,7 +1451,7 @@ export default function Home() {
         </table>
 
         {/* Pagination Controls */}
-        <div className="border-sand-500 px-4 py-2 flex items-center justify-between gap-2">
+        <div className="border-t border-stone-200 px-4 py-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm text-sand-900">
             <span>Rows per page</span>
             <select
