@@ -321,6 +321,9 @@ export default function Home() {
   const [activeDateCell, setActiveDateCell] = useState<{ rowId: string; columnId: string } | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
+  // Add new state for selected rows
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+
   // Start editing
   const startEditing = (rowId: string, columnId: string) => {
     const column = columns.find(col => col.id === columnId)
@@ -790,6 +793,26 @@ export default function Home() {
     setCurrentPage(Math.min(Math.max(1, page), totalPages))
   }
 
+  // Add select all handler
+  const handleSelectAll = () => {
+    if (selectedRows.size === currentData.length) {
+      setSelectedRows(new Set())
+    } else {
+      setSelectedRows(new Set(currentData.map(row => row.id)))
+    }
+  }
+
+  // Add row selection handler
+  const handleRowSelect = (rowId: number) => {
+    const newSelected = new Set(selectedRows)
+    if (newSelected.has(rowId)) {
+      newSelected.delete(rowId)
+    } else {
+      newSelected.add(rowId)
+    }
+    setSelectedRows(newSelected)
+  }
+
   return (
     <main className="p-4">
       <div>
@@ -797,7 +820,12 @@ export default function Home() {
           
           <div className="flex items-center gap-3">
             <span className="text-xl font-semibold">Table Prototype</span>
-            <span className="text-sm text-gray-500">Showing {filteredData.length} of {mockData.length} rows</span>
+            <span className="text-sm text-gray-500">
+              {selectedRows.size > 0 
+                ? `Showing ${selectedRows.size} selected of ${filteredData.length} rows`
+                : `Showing ${filteredData.length} of ${mockData.length} rows`
+              }
+            </span>
           </div>
 
           {/* Table Controls */}
@@ -1267,6 +1295,18 @@ export default function Home() {
         <table className="w-full rounded-lg overflow-hidden">
           <thead>
             <tr className="bg-stone-200 border-b border-stone-300">
+              <th className="w-12 px-4 py-2">
+                <div className="flex items-center justify-center">
+                  <div 
+                    className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white cursor-pointer hover:bg-gray-50"
+                    onClick={handleSelectAll}
+                  >
+                    {currentData.length > 0 && selectedRows.size === currentData.length && (
+                      <Check className="h-3 w-3 text-primary" />
+                    )}
+                  </div>
+                </div>
+              </th>
               {columns.filter(col => col.visible).map(column => (
                 <th
                   key={column.id}
@@ -1433,7 +1473,25 @@ export default function Home() {
           </thead>
           <tbody>
             {currentData.map((row) => (
-              <tr key={row.id} className="hover:bg-stone-100">
+              <tr 
+                key={row.id} 
+                className={cn(
+                  "hover:bg-stone-100 transition-colors",
+                  selectedRows.has(row.id) && "bg-blue-50 hover:bg-blue-100"
+                )}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-center">
+                    <div 
+                      className="flex items-center justify-center w-4 h-4 border rounded border-gray-300 bg-white cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleRowSelect(row.id)}
+                    >
+                      {selectedRows.has(row.id) && (
+                        <Check className="h-3 w-3 text-primary" />
+                      )}
+                    </div>
+                  </div>
+                </td>
                 {columns.filter(col => col.visible).map(column => (
                   <td 
                     key={column.id} 
